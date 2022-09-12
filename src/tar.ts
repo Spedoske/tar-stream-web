@@ -47,15 +47,6 @@
 
 import { PaxExtendedHeader, PaxKeyword } from './pax';
 
-if (typeof ReadableStream === 'undefined') {
-  const globalVar: any =
-    (typeof globalThis !== 'undefined' && globalThis) ||
-    (typeof self !== 'undefined' && self) ||
-    (typeof global !== 'undefined' && global) ||
-    {};
-  Reflect.set(globalVar, 'ReadableStream', require('node:stream/web').ReadableStream);
-}
-
 const max_prefix_length = 155 - 1;
 const max_name_length = 100 - 1;
 
@@ -163,6 +154,52 @@ function padding_to_512(buf: Uint8Array): Uint8Array {
   let new_buf = new Uint8Array(length);
   new_buf.set(buf);
   return new_buf;
+}
+
+function ReadablePaddingStream(stream: ReadableStream, chunkSize = 512) {
+  let reader = stream.getReader();
+  let buffer = new Uint8Array();
+  let subarray_begin = 0;
+  return new ReadableStream({
+    start(controller) {
+      return (async () => {
+        let { value, done } = await reader.read();
+        if (done) {
+          controller.close();
+        } else {
+          buffer = value;
+        }
+      })();
+    },
+    pull(controller) {
+      return (async () => {
+        if ((buffer.length - subarray_begin) / chunkSize >= 1) {
+          const batch_size =  Math.floor((buffer.length - subarray_begin) / chunkSize);
+          controller.enqueue(buffer.subarray(subarray_begin, subarray_begin + chunkSize * batch_size));
+          subarray_begin += chunkSize * batch_size;
+        } else {
+          let chunk = new Uint8Array(chunkSize);
+          let chunk_cursor = 0;
+          while (chunk_cursor < chunkSize) {
+            const taken_from_buffer = buffer.subarray(subarray_begin, subarray_begin + chunkSize - chunk_cursor);
+            chunk.set(taken_from_buffer, chunk_cursor);
+            chunk_cursor += taken_from_buffer.length;
+            if (chunk_cursor === chunkSize) {
+              break;
+            }
+            let { value, done } = await reader.read();
+            if (done) {
+              controller.enqueue(chunk);
+              controller.close();
+              break;
+            }
+            buffer = value;
+            subarray_begin = 0;
+          }
+        }
+      })();
+    },
+  });
 }
 
 function ReadableBufferStream(bytes: Uint8Array, chunkSize = 512) {
@@ -316,7 +353,7 @@ class TarHeaderBlock {
     } else if (param.content instanceof Uint8Array) {
       this.content = ReadableBufferStream(param.content);
     } else {
-      this.content = param.content;
+      this.content = ReadablePaddingStream(param.content);
     }
   }
 
