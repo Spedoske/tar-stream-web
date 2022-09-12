@@ -2,8 +2,9 @@
   "name": "tar-stream-web",
   "version": "1.0.0",
   "description": "A library to create a tar archive from file streams. Support both browser and node.js.",
-  "main": "./lib/index.js",
-  "types": "./lib/index.d.ts",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": ["lib/**/*"],
   "scripts": {
     "build": "tsc",
     "format": "prettier --write \"src/**/*.ts\"",
