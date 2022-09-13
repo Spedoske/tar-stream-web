@@ -159,7 +159,6 @@ function padding_to_512(buf: Uint8Array): Uint8Array {
 function ReadablePaddingStream(stream: ReadableStream, chunkSize = 512) {
   let reader = stream.getReader();
   let buffer = new Uint8Array();
-  let subarray_begin = 0;
   return new ReadableStream({
     start(controller) {
       return (async () => {
@@ -173,29 +172,33 @@ function ReadablePaddingStream(stream: ReadableStream, chunkSize = 512) {
     },
     pull(controller) {
       return (async () => {
-        if ((buffer.length - subarray_begin) / chunkSize >= 1) {
-          const batch_size =  Math.floor((buffer.length - subarray_begin) / chunkSize);
-          controller.enqueue(buffer.subarray(subarray_begin, subarray_begin + chunkSize * batch_size));
-          subarray_begin += chunkSize * batch_size;
-        } else {
-          let chunk = new Uint8Array(chunkSize);
-          let chunk_cursor = 0;
-          while (chunk_cursor < chunkSize) {
-            const taken_from_buffer = buffer.subarray(subarray_begin, subarray_begin + chunkSize - chunk_cursor);
-            chunk.set(taken_from_buffer, chunk_cursor);
-            chunk_cursor += taken_from_buffer.length;
-            if (chunk_cursor === chunkSize) {
-              break;
-            }
-            let { value, done } = await reader.read();
-            if (done) {
-              controller.enqueue(chunk);
-              controller.close();
-              break;
-            }
-            buffer = value;
-            subarray_begin = 0;
+        if (buffer.length / chunkSize >= 1) {
+          const batch_size = Math.floor((buffer.length) / chunkSize);
+          controller.enqueue(buffer.subarray(0, chunkSize * batch_size));
+          buffer = buffer.subarray(chunkSize * batch_size);
+          return;
+        }
+        let eos = false;
+        let chunk = new Uint8Array(chunkSize);
+        let chunk_cursor = buffer.length;
+        chunk.set(buffer);
+        buffer = buffer.subarray(0, 0);
+        while (chunk_cursor < chunkSize) {
+          let { value, done } = await reader.read();
+          eos = done;
+          if (eos) {
+            break;
           }
+          const taken_from_buffer = value.subarray(0, chunkSize - chunk_cursor);
+          chunk.set(taken_from_buffer, chunk_cursor);
+          chunk_cursor += taken_from_buffer.length;
+          buffer = value.subarray(taken_from_buffer.length);
+        }
+        if (chunk_cursor !== 0) {
+          controller.enqueue(chunk);
+        }
+        if (eos) {
+          controller.close();
         }
       })();
     },
@@ -424,4 +427,4 @@ export class Tarball {
   }
 }
 
-export { generate_prefix_and_name };
+export { generate_prefix_and_name, ReadableConcatStream };

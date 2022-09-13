@@ -1,6 +1,6 @@
 {
   "name": "tar-stream-web",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A library to create a tar archive from file streams. Support both browser and node.js.",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

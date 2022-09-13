@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import Tarball from '../src/';
-import { generate_prefix_and_name } from '../src/tar';
+import { generate_prefix_and_name, ReadableConcatStream } from '../src/tar';
 
 const fs = require('fs');
 
@@ -105,7 +105,7 @@ test('Write multiple files', () => {
   saveTar('2.tar')(tar.stream as ReadableStream);
 });
 
-test('Write multiple files from streams', () => {
+test('Write multiple files from streams (non-uniform blocks)', () => {
   const tar = new Tarball([{
     name: '1.txt',
     size: 511,
@@ -120,3 +120,28 @@ test('Write multiple files from streams', () => {
   saveTar('2.tar')(tar.stream as ReadableStream);
 });
 
+test('Write a file from non-uniform streams', () => {
+  const tar = new Tarball([{
+    name: '1.txt',
+    size: 1024,
+    mtime: new Date(0o14307600623 * 1000),
+    content: ReadableConcatStream(ReadableBufferStream('0',1, 511),ReadableBufferStream('1',1, 513)),
+  }]);
+  saveTar('3.tar')(tar.stream as ReadableStream);
+});
+
+
+test('Write multiple files from streams', () => {
+  const tar = new Tarball([{
+    name: '1.txt',
+    size: 512,
+    mtime: new Date(0o14307600623 * 1000),
+    content: ReadableBufferStream('0',1, 512),
+  }, {
+    name: '2.txt',
+    size: 512,
+    mtime: new Date(0o14307600623 * 1000),
+    content: ReadableBufferStream('1',1, 512),
+  }]);
+  saveTar('4.tar')(tar.stream as ReadableStream);
+});
